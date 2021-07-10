@@ -1,0 +1,50 @@
+with "LB" as(
+select
+(select "name" from "GeoRegions" where "id" = v."cityId") "cityName"
+, case when (select "name" from "GeoRegions" where "id" = v."geofenceId") like '%NP Zone'
+        then left((select "name" from "GeoRegions" where "id" = v."geofenceId"), -8)
+    when (select "name" from "GeoRegions" where "id" = v."geofenceId") like '%NP Zones'
+        then left((select "name" from "GeoRegions" where "id" = v."geofenceId"), -9) 
+    when (select "name" from "GeoRegions" where "id" = v."geofenceId") like '%school zone'
+        then left((select "name" from "GeoRegions" where "id" = v."geofenceId"), -12)
+    else (select "name" from "GeoRegions" where "id" = v."geofenceId")
+    end as "geoName"
+, count(ve."id")
+from "VehicleEvents" ve
+join "Vehicles" v on v."id"= ve."vehicleId"
+where v."cityId" in (121,416,341, 612)
+and ve."eventName" = 'RIDER_SCANNED_UNRIDEABLE_VEHICLE'
+and ("extra"->>'reason' = 'start trip prepare failed because You can not start this Beam because its battery is too low.'
+or "extra"->>'reason' = 'start trip prepare failed because You can not start this Beam because its battery is too low. for 0')
+and v."vehicleModel" in ('NINEBOT_MODEL_MAX_SWAPPABLE', 'NINEBOT_MODEL_MAX_PLUS')
+and ve."createdAt" > now() - '6 hours'::interval
+group by 1,2
+)
+
+, "scan" as(
+select
+(select "name" from "GeoRegions" where "id" = "cityId") "cityName"
+, case when (select "name" from "GeoRegions" where "id" = "startGeofenceId") like '%NP Zone'
+        then left((select "name" from "GeoRegions" where "id" = "startGeofenceId"), -8)
+    when (select "name" from "GeoRegions" where "id" = "startGeofenceId") like '%NP Zones'
+        then left((select "name" from "GeoRegions" where "id" = "startGeofenceId"), -9) 
+    when (select "name" from "GeoRegions" where "id" = "startGeofenceId") like '%school zone'
+        then left((select "name" from "GeoRegions" where "id" = "startGeofenceId"), -12)
+    else (select "name" from "GeoRegions" where "id" = "startGeofenceId")
+    end as "geoName"
+, count("id")
+from "Trips"
+where "status" in (0,1)
+and "createdAt" > now() - '6 hours'::interval
+and "cityId" in (121, 416, 341, 612)
+group by 1,2
+)
+
+select
+"LB"."cityName"
+, "LB"."geoName"
+, "LB"."count"*100/ "scan"."count"::decimal as "LB scan fail%"
+, "LB"."count" "fail count"
+, "scan"."count" as "scan count"
+from "LB"
+join "scan" on "LB"."geoName" = "scan"."geoName"
